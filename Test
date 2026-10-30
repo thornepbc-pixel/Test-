@@ -1,0 +1,995 @@
+```html
+<!DOCTYPE html>
+<html lang="en" class="dark h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Interactive Roofing Construction Detail</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        slate: {
+                            850: '#111827',
+                            900: '#0f172a',
+                            950: '#020617',
+                        },
+                        amber: {
+                            400: '#fbbf24',
+                            500: '#f59e0b',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts & FontAwesome -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+            overflow: hidden;
+        }
+        canvas {
+            outline: none;
+            display: block;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(51, 65, 85, 0.8);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(71, 85, 105, 1);
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .hotspot-pin {
+            transform: translate(-50%, -50%);
+            transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+        }
+        .hotspot-pin:hover {
+            transform: translate(-50%, -50%) scale(1.25);
+        }
+    </style>
+
+    <!-- ES Module Shims & ESM Imports for guaranteed loading without dependency clashes -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+                "gsap": "https://unpkg.com/gsap@3.12.5/index.js"
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-950 text-slate-100 h-full w-full relative">
+
+    <!-- Loading Indicator Screen -->
+    <div id="loading-screen" class="absolute inset-0 z-50 bg-slate-950 flex flex-col items-center justify-center transition-opacity duration-500">
+        <div class="w-12 h-12 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin mb-4"></div>
+        <p class="text-sm font-semibold text-slate-300">Building 3D Roofing Assembly...</p>
+    </div>
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container" class="w-full h-full absolute inset-0 z-0"></div>
+
+    <!-- Top Navigation Header -->
+    <header class="absolute top-0 left-0 right-0 z-10 p-4 pointer-events-none flex justify-between items-center">
+        <div class="pointer-events-auto glass-panel px-4 py-2.5 rounded-xl flex items-center space-x-3 shadow-2xl">
+            <div class="p-2 bg-amber-500/20 text-amber-400 rounded-lg">
+                <i class="fa-solid fa-layer-group text-lg"></i>
+            </div>
+            <div>
+                <h1 class="text-base font-bold text-white tracking-wide leading-tight">Commercial Flat Roof Detail</h1>
+                <p class="text-xs text-slate-400">3D Interactive Assembly Inspector</p>
+            </div>
+        </div>
+
+        <div class="pointer-events-auto glass-panel px-3 py-2 rounded-xl flex items-center space-x-2 text-xs font-medium text-slate-300 shadow-2xl">
+            <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>Procedural WebGL</span>
+        </div>
+    </header>
+
+    <!-- Hotspots Overlay Container -->
+    <div id="hotspots-container" class="absolute inset-0 pointer-events-none z-10"></div>
+
+    <!-- Floating Action Toolbar (Bottom Center) -->
+    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 pointer-events-auto flex items-center bg-slate-900/90 backdrop-blur-md p-2 rounded-2xl border border-slate-700/60 shadow-2xl space-x-2">
+        <button id="btn-explode" class="flex items-center space-x-2 bg-amber-500 hover:bg-amber-400 text-slate-950 px-4 py-2.5 rounded-xl font-semibold transition-all duration-200 active:scale-95 shadow-lg shadow-amber-500/20">
+            <i class="fa-solid fa-arrows-up-down text-sm"></i>
+            <span id="explode-text" class="text-xs sm:text-sm">Explode Layers</span>
+        </button>
+
+        <div class="h-6 w-px bg-slate-700/80 mx-1"></div>
+
+        <button id="btn-reset-view" title="Reset Camera View" class="p-2.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl transition-all">
+            <i class="fa-solid fa-arrows-to-dot text-base"></i>
+        </button>
+
+        <button id="btn-toggle-hotspots" title="Toggle Hotspots" class="p-2.5 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 rounded-xl transition-all">
+            <i class="fa-solid fa-location-dot text-base"></i>
+        </button>
+
+        <button id="btn-wireframe" title="Toggle Wireframe Mode" class="p-2.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl transition-all">
+            <i class="fa-solid fa-cube text-base"></i>
+        </button>
+
+        <button id="btn-isolate" title="Isolate Selected Layer" class="p-2.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl transition-all opacity-50 cursor-not-allowed" disabled>
+            <i class="fa-solid fa-eye-slash text-base"></i>
+        </button>
+
+        <div class="h-6 w-px bg-slate-700/80 mx-1"></div>
+
+        <!-- New Export & Share Controls -->
+        <button id="btn-snapshot" title="Export High-Res PNG Snapshot" class="p-2.5 text-amber-400 hover:text-amber-300 hover:bg-slate-800 rounded-xl transition-all">
+            <i class="fa-solid fa-camera text-base"></i>
+        </button>
+
+        <button id="btn-share" title="Copy Shareable Link" class="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-xl text-xs font-semibold transition-all">
+            <i class="fa-solid fa-share-nodes text-sm text-amber-400"></i>
+            <span class="hidden sm:inline">Share View</span>
+        </button>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 transition-all duration-300 transform -translate-y-2 bg-slate-900 border border-emerald-500/50 text-emerald-400 px-4 py-2.5 rounded-xl shadow-2xl flex items-center space-x-2 text-xs font-semibold">
+        <i class="fa-solid fa-circle-check text-base text-emerald-400"></i>
+        <span id="toast-message">Shareable URL copied to clipboard!</span>
+    </div>
+
+    <!-- Side Control Panel (Right) -->
+    <aside id="side-panel" class="absolute top-20 right-4 bottom-24 w-80 sm:w-96 glass-panel rounded-2xl z-20 flex flex-col shadow-2xl transition-transform duration-300 translate-x-0">
+        <div class="p-4 border-b border-slate-800 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i class="fa-solid fa-list-check text-amber-400 text-sm"></i>
+                <h2 class="text-sm font-semibold text-slate-200">System Assembly Layers</h2>
+            </div>
+            <button id="btn-close-info" class="text-slate-400 hover:text-slate-200 text-xs sm:hidden">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="p-3 overflow-y-auto space-y-1.5 max-h-48 border-b border-slate-800/80 shrink-0" id="layer-list-container">
+            <!-- Dynamic layer buttons -->
+        </div>
+
+        <div class="p-5 overflow-y-auto flex-1 space-y-4" id="info-card-body">
+            <div id="info-placeholder" class="h-full flex flex-col items-center justify-center text-center p-4 text-slate-500">
+                <i class="fa-solid fa-hand-pointer text-3xl mb-3 animate-bounce text-slate-600"></i>
+                <p class="text-xs font-medium">Click on any roof component in 3D or select from the list above to view technical specifications and code details.</p>
+            </div>
+
+            <div id="info-content" class="hidden space-y-4">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <span id="layer-badge" class="px-2 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                            Layer 1
+                        </span>
+                        <h3 id="layer-title" class="text-lg font-bold text-white mt-1">Single-Ply Membrane</h3>
+                    </div>
+                </div>
+
+                <p id="layer-desc" class="text-xs text-slate-300 leading-relaxed">
+                    60-mil reinforced membrane serving as the primary waterproofing barrier.
+                </p>
+
+                <div class="bg-slate-900/80 rounded-xl p-3 border border-slate-800/80 space-y-2">
+                    <h4 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Technical Specs</h4>
+                    <div id="layer-specs" class="grid grid-cols-2 gap-2 text-xs"></div>
+                </div>
+
+                <div class="space-y-1">
+                    <h4 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Primary Function</h4>
+                    <p id="layer-function" class="text-xs text-slate-300 bg-slate-900/40 p-2.5 rounded-lg border border-slate-800/50"></p>
+                </div>
+
+                <div class="p-3 bg-amber-950/20 border border-amber-500/20 rounded-xl flex items-start space-x-2.5">
+                    <i class="fa-solid fa-screwdriver-wrench text-amber-400 text-sm mt-0.5"></i>
+                    <div class="text-xs">
+                        <span class="font-semibold text-amber-300 block mb-0.5">Installation / Code Requirement</span>
+                        <span id="layer-installation" class="text-slate-300"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { gsap } from 'gsap';
+
+        // --- DATA SPECIFICATION FOR ROOF LAYERS ---
+        const ROOF_LAYERS = [
+            {
+                id: 'parapet',
+                name: 'Masonry Parapet & Flashing Detail',
+                shortName: 'Parapet & Flashing',
+                badge: 'Termination Detail',
+                color: 0x64748b,
+                desc: 'CMU parapet wall with continuous metal coping cap, counter-flashing, and termination bar for perimeter watertightness.',
+                function: 'Encloses edge detail, directs runoff water, and anchors membrane terminations.',
+                installation: 'Mechanically anchored into masonry. Continuous polyurethane sealant bead at counter-flashing top edge.',
+                specs: {
+                    'Coping Cap': '24-ga Pre-finished Steel',
+                    'Fasteners': '1/4" Masonry Anchors @ 12" o.c.',
+                    'Sealant': 'High-Performance Polyurethane',
+                    'Base Flashing': '60-mil Membrane'
+                },
+                heightOffset: 1.25,
+                thickness: 0.65,
+                type: 'parapet'
+            },
+            {
+                id: 'membrane',
+                name: 'Single-Ply TPO Waterproof Membrane',
+                shortName: 'TPO Membrane & Seams',
+                badge: 'Layer 5 (Top)',
+                color: 0xecfeff,
+                desc: 'High-reflectance 60-mil White Thermoplastic Polyolefin (TPO) membrane with hot-air welded overlap seams.',
+                function: 'Primary waterproofing barrier protecting the building roof stack from water ingress.',
+                installation: 'Fully adhered with low-VOC bonding adhesive; all lap seams hot-air welded at 900°F–1000°F.',
+                specs: {
+                    'Thickness': '0.060 inches (1.5mm)',
+                    'SRI Rating': '104 (Cool Roof Certified)',
+                    'Seam Width': '1.5-inch Continuous Weld',
+                    'Fire Rating': 'UL Class A'
+                },
+                heightOffset: 0.85,
+                thickness: 0.08,
+                type: 'sheet'
+            },
+            {
+                id: 'coverboard',
+                name: 'High-Density Gypsum Cover Board',
+                shortName: 'Gypsum Cover Board',
+                badge: 'Layer 4',
+                color: 0xd97706,
+                desc: '1/2" fiberglass mat-faced non-combustible gypsum board designed for enhanced puncture and wind uplift resistance.',
+                function: 'Protects insulation from heavy foot traffic, hail damage, and enhances wind-uplift performance.',
+                installation: 'Staggered board pattern over insulation, mechanically fastened with heavy-duty roof screws & stress plates.',
+                specs: {
+                    'Thickness': '0.5 inches (12.7mm)',
+                    'Compressive Str.': '1500 psi',
+                    'Board Size': '4ft x 8ft Panels',
+                    'Fastener Density': '16 Fasteners per 4x8 Panel'
+                },
+                heightOffset: 0.55,
+                thickness: 0.12,
+                type: 'board'
+            },
+            {
+                id: 'insulation',
+                name: 'Polyisocyanurate (Polyiso) Thermal Insulation',
+                shortName: 'Polyiso Insulation',
+                badge: 'Layer 3',
+                color: 0xfef08a,
+                desc: 'Rigid polyisocyanurate foam insulation boards arranged in dual staggered layers to minimize thermal bridging.',
+                function: 'Provides primary thermal resistance (R-value) for building thermal envelope.',
+                installation: 'Installed in two staggered 1.75" layers with joints offset by minimum 12" to eliminate continuous thermal breaks.',
+                specs: {
+                    'R-Value': 'R-20.5 Continuous',
+                    'Compressive Str.': '25 psi (ASTM C1289)',
+                    'Density': '2.0 lb/cu.ft',
+                    'Facer': 'Coated Glass Facer (CGF)'
+                },
+                heightOffset: 0.2,
+                thickness: 0.45,
+                type: 'staggered_board'
+            },
+            {
+                id: 'vapor',
+                name: 'Self-Adhered Vapor Retarder / Barrier',
+                shortName: 'Vapor Barrier',
+                badge: 'Layer 2',
+                color: 0x1e293b,
+                desc: 'SBS-modified self-adhering asphalt membrane laminated to a tough high-density polyethylene film.',
+                function: 'Prevents interior warm, humid moisture from migrating into the cold insulation layer.',
+                installation: 'Self-adhered directly over primed steel deck crowns with 3" side and 6" end laps rolled tight.',
+                specs: {
+                    'Thickness': '40-mil (1.0mm)',
+                    'Permeance': '0.02 US Perms',
+                    'Elongation': '> 300%',
+                    'Adhesion': 'Self-Adhering Rubberized'
+                },
+                heightOffset: -0.15,
+                thickness: 0.05,
+                type: 'sheet'
+            },
+            {
+                id: 'deck',
+                name: 'Corrugated Structural Steel Deck',
+                shortName: 'Structural Metal Deck',
+                badge: 'Layer 1 (Base)',
+                color: 0x94a3b8,
+                desc: '22-Gauge cold-formed corrugated structural steel deck with G90 galvanized zinc coating.',
+                function: 'Primary load-bearing structural substrate supporting static roofing loads and wind forces.',
+                installation: 'Puddle welded or mechanically fastened with self-drilling screws to open-web steel joists.',
+                specs: {
+                    'Gauge': '22-Gauge (0.0295")',
+                    'Rib Profile': 'Type B (Wide Rib)',
+                    'Yield Strength': '33,000 psi minimum',
+                    'Finish': 'G90 Galvanized Zinc'
+                },
+                heightOffset: -0.55,
+                thickness: 0.35,
+                type: 'deck'
+            }
+        ];
+
+        // --- APP STATE ---
+        let scene, camera, renderer, controls;
+        let meshGroup, layerMeshes = [];
+        let hotspots = [];
+        let isExploded = false;
+        let isWireframe = false;
+        let selectedLayerId = null;
+        let isIsolated = false;
+
+        const EXP_FACTOR = 1.85;
+
+        // --- INITIALIZATION ---
+        function init() {
+            const container = document.getElementById('canvas-container');
+
+            // 1. Scene Setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0f1d);
+            scene.fog = new THREE.FogExp2(0x0a0f1d, 0.035);
+
+            // 2. Camera Setup
+            camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
+            camera.position.set(6.5, 5.0, 8.0);
+
+            // 3. Renderer Setup
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.1;
+            container.appendChild(renderer.domElement);
+
+            // 4. Controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 + 0.05;
+            controls.minDistance = 3;
+            controls.maxDistance = 20;
+            controls.target.set(0, 0, 0);
+
+            // 5. Lighting
+            setupLighting();
+
+            // 6. Environment Helpers
+            setupEnvironment();
+
+            // 7. Construct 3D Roof Model
+            meshGroup = new THREE.Group();
+            scene.add(meshGroup);
+            buildRoofModel();
+
+            // 8. Populate UI List
+            buildLayerUI();
+
+            // Parse state parameters from URL on load
+            loadStateFromURL();
+
+            // 9. Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            renderer.domElement.addEventListener('pointerdown', onPointerDown);
+
+            // 10. Controls Toolbar listeners
+            document.getElementById('btn-explode').addEventListener('click', toggleExplodedView);
+            document.getElementById('btn-reset-view').addEventListener('click', resetCamera);
+            document.getElementById('btn-toggle-hotspots').addEventListener('click', toggleHotspotsVisibility);
+            document.getElementById('btn-wireframe').addEventListener('click', toggleWireframe);
+            document.getElementById('btn-isolate').addEventListener('click', toggleIsolate);
+            document.getElementById('btn-snapshot').addEventListener('click', exportSnapshot);
+            document.getElementById('btn-share').addEventListener('click', shareStateLink);
+            document.getElementById('btn-close-info').addEventListener('click', () => {
+                document.getElementById('side-panel').classList.add('translate-x-full');
+            });
+
+            // Hide Loading Screen
+            const loadingScreen = document.getElementById('loading-screen');
+            loadingScreen.classList.add('opacity-0');
+            setTimeout(() => loadingScreen.remove(), 500);
+
+            // Start Animation Loop
+            animate();
+        }
+
+        // --- LIGHTING SETUP ---
+        function setupLighting() {
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+
+            const mainLight = new THREE.DirectionalLight(0xffffff, 1.3);
+            mainLight.position.set(8, 14, 6);
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.width = 2048;
+            mainLight.shadow.mapSize.height = 2048;
+            mainLight.shadow.camera.near = 0.5;
+            mainLight.shadow.camera.far = 25;
+            const d = 6;
+            mainLight.shadow.camera.left = -d;
+            mainLight.shadow.camera.right = d;
+            mainLight.shadow.camera.top = d;
+            mainLight.shadow.camera.bottom = -d;
+            mainLight.shadow.bias = -0.0005;
+            scene.add(mainLight);
+
+            const fillLight = new THREE.DirectionalLight(0x38bdf8, 0.4);
+            fillLight.position.set(-6, 4, -6);
+            scene.add(fillLight);
+
+            const warmRim = new THREE.PointLight(0xf59e0b, 0.8, 12);
+            warmRim.position.set(2, 2, -4);
+            scene.add(warmRim);
+        }
+
+        // --- ENVIRONMENT SETUP ---
+        function setupEnvironment() {
+            const gridHelper = new THREE.GridHelper(20, 20, 0x334155, 0x1e293b);
+            gridHelper.position.y = -2.2;
+            scene.add(gridHelper);
+
+            const shadowPlaneGeo = new THREE.PlaneGeometry(30, 30);
+            const shadowPlaneMat = new THREE.ShadowMaterial({ opacity: 0.35 });
+            const shadowPlane = new THREE.Mesh(shadowPlaneGeo, shadowPlaneMat);
+            shadowPlane.rotation.x = -Math.PI / 2;
+            shadowPlane.position.y = -2.21;
+            shadowPlane.receiveShadow = true;
+            scene.add(shadowPlane);
+        }
+
+        // --- PROCEDURAL GEOMETRY BUILDERS ---
+        function createCorrugatedDeckGeometry(width, length, pitch, height) {
+            const shape = new THREE.Shape();
+            const repeats = Math.floor(length / pitch);
+            const startX = -length / 2;
+
+            shape.moveTo(startX, 0);
+            for (let i = 0; i < repeats; i++) {
+                const x = startX + i * pitch;
+                shape.lineTo(x + pitch * 0.2, 0);
+                shape.lineTo(x + pitch * 0.35, height);
+                shape.lineTo(x + pitch * 0.65, height);
+                shape.lineTo(x + pitch * 0.8, 0);
+                shape.lineTo(x + pitch, 0);
+            }
+
+            const geo = new THREE.ExtrudeGeometry(shape, { steps: 1, depth: width, bevelEnabled: false });
+            geo.center();
+            geo.rotateY(Math.PI / 2);
+            return geo;
+        }
+
+        // --- BUILD MODEL LAYERS ---
+        function buildRoofModel() {
+            const width = 4.0;
+            const length = 4.0;
+
+            ROOF_LAYERS.forEach((data, index) => {
+                let mesh;
+
+                if (data.type === 'deck') {
+                    const geo = createCorrugatedDeckGeometry(width, length, 0.5, 0.22);
+                    const mat = new THREE.MeshStandardMaterial({
+                        color: data.color,
+                        metalness: 0.8,
+                        roughness: 0.3,
+                        side: THREE.DoubleSide
+                    });
+                    mesh = new THREE.Mesh(geo, mat);
+                } else if (data.type === 'parapet') {
+                    const group = new THREE.Group();
+
+                    // Masonry Block Wall
+                    const wallGeo = new THREE.BoxGeometry(0.5, 1.4, length + 0.5);
+                    const wallMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.9 });
+                    const wall = new THREE.Mesh(wallGeo, wallMat);
+                    wall.position.set(-width / 2 - 0.25, 0.3, 0.25);
+                    group.add(wall);
+
+                    // Metal Coping Cap
+                    const capGeo = new THREE.BoxGeometry(0.65, 0.1, length + 0.6);
+                    const capMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.7, roughness: 0.3 });
+                    const cap = new THREE.Mesh(capGeo, capMat);
+                    cap.position.set(-width / 2 - 0.25, 1.05, 0.25);
+                    group.add(cap);
+
+                    // Termination Counter-Flashing Bar
+                    const flashGeo = new THREE.BoxGeometry(0.08, 0.25, length);
+                    const flashMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.6, roughness: 0.4 });
+                    const flash = new THREE.Mesh(flashGeo, flashMat);
+                    flash.position.set(-width / 2 + 0.04, 0.4, 0);
+                    group.add(flash);
+
+                    mesh = group;
+                } else if (data.type === 'staggered_board') {
+                    // Polyiso Insulation constructed as dual boards with staggered offset seam
+                    const group = new THREE.Group();
+                    const subMat = new THREE.MeshStandardMaterial({ color: data.color, roughness: 0.85 });
+
+                    const layer1 = new THREE.Mesh(new THREE.BoxGeometry(width, data.thickness / 2, length), subMat);
+                    layer1.position.y = -data.thickness / 4;
+
+                    const layer2 = new THREE.Mesh(new THREE.BoxGeometry(width, data.thickness / 2, length), subMat);
+                    layer2.position.y = data.thickness / 4;
+                    group.add(layer1, layer2);
+
+                    mesh = group;
+                } else if (data.id === 'membrane') {
+                    // TPO Membrane with raised heat-welded seam details
+                    const group = new THREE.Group();
+                    const mainMat = new THREE.MeshStandardMaterial({ color: data.color, roughness: 0.25 });
+                    const baseMesh = new THREE.Mesh(new THREE.BoxGeometry(width, data.thickness, length), mainMat);
+                    group.add(baseMesh);
+
+                    // Weld Seams lines
+                    const seamMat = new THREE.MeshStandardMaterial({ color: 0xcff4fc, roughness: 0.3 });
+                    for (let z = -length / 2 + 1; z < length / 2; z += 1.33) {
+                        const seam = new THREE.Mesh(new THREE.BoxGeometry(width, 0.02, 0.06), seamMat);
+                        seam.position.set(0, data.thickness / 2 + 0.01, z);
+                        group.add(seam);
+                    }
+                    mesh = group;
+                } else {
+                    const geo = new THREE.BoxGeometry(width, data.thickness, length);
+                    const mat = new THREE.MeshStandardMaterial({
+                        color: data.color,
+                        roughness: data.id === 'vapor' ? 0.8 : 0.5,
+                        metalness: data.id === 'vapor' ? 0.2 : 0.1
+                    });
+                    mesh = new THREE.Mesh(geo, mat);
+                }
+
+                // Enable shadows
+                mesh.traverse(child => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+
+                const assembledY = data.heightOffset;
+                const explodedY = data.heightOffset * EXP_FACTOR;
+
+                mesh.position.set(0, assembledY, 0);
+                mesh.userData = {
+                    id: data.id,
+                    index: index,
+                    assembledY: assembledY,
+                    explodedY: explodedY,
+                    data: data
+                };
+
+                meshGroup.add(mesh);
+                layerMeshes.push(mesh);
+
+                // Create HTML 3D Hotspot Pin
+                createHotspot(mesh, data);
+            });
+        }
+
+        // --- HOTSPOTS CREATION ---
+        function createHotspot(mesh, data) {
+            const container = document.getElementById('hotspots-container');
+            const pin = document.createElement('button');
+            pin.className = 'hotspot-pin absolute pointer-events-auto flex items-center justify-center w-7 h-7 rounded-full bg-slate-900/90 text-amber-400 border border-amber-500/50 shadow-lg font-bold text-xs hover:bg-amber-500 hover:text-slate-950 transition-all';
+            pin.innerHTML = `<span>${ROOF_LAYERS.length - ROOF_LAYERS.indexOf(data)}</span>`;
+            pin.dataset.id = data.id;
+
+            pin.addEventListener('click', (e) => {
+                e.stopPropagation();
+                selectLayer(data.id);
+            });
+
+            container.appendChild(pin);
+
+            hotspots.push({
+                element: pin,
+                mesh: mesh,
+                id: data.id
+            });
+        }
+
+        // --- UPDATE SCREEN-SPACE HOTSPOTS ---
+        function updateHotspots() {
+            const tempV = new THREE.Vector3();
+
+            hotspots.forEach(hotspot => {
+                if (isIsolated && hotspot.id !== selectedLayerId) {
+                    hotspot.element.style.display = 'none';
+                    return;
+                }
+
+                hotspot.mesh.getWorldPosition(tempV);
+                
+                if (hotspot.id === 'parapet') {
+                    tempV.x += -1.8;
+                    tempV.y += 0.8;
+                } else {
+                    tempV.x += 1.5;
+                    tempV.z += 1.5;
+                }
+
+                tempV.project(camera);
+
+                if (tempV.z > 1) {
+                    hotspot.element.style.display = 'none';
+                    return;
+                }
+
+                const x = (tempV.x * .5 + .5) * window.innerWidth;
+                const y = (-(tempV.y * .5) + .5) * window.innerHeight;
+
+                hotspot.element.style.left = `${x}px`;
+                hotspot.element.style.top = `${y}px`;
+                hotspot.element.style.display = 'flex';
+            });
+        }
+
+        // --- UI BUILDER ---
+        function buildLayerUI() {
+            const container = document.getElementById('layer-list-container');
+            container.innerHTML = '';
+
+            ROOF_LAYERS.forEach((data, idx) => {
+                const btn = document.createElement('button');
+                btn.className = `layer-btn w-full flex items-center justify-between p-2.5 rounded-xl border text-left transition-all text-xs font-medium ${
+                    selectedLayerId === data.id
+                        ? 'bg-amber-500/15 border-amber-500/60 text-amber-300'
+                        : 'bg-slate-900/40 border-slate-800/80 text-slate-300 hover:bg-slate-800/60 hover:text-white'
+                }`;
+                btn.dataset.id = data.id;
+
+                btn.innerHTML = `
+                    <div class="flex items-center space-x-2.5 truncate">
+                        <span class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-400 shrink-0">
+                            ${ROOF_LAYERS.length - idx}
+                        </span>
+                        <span class="truncate">${data.shortName}</span>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-[10px] opacity-40"></i>
+                `;
+
+                btn.addEventListener('click', () => selectLayer(data.id));
+                container.appendChild(btn);
+            });
+        }
+
+        // --- SELECTION & INSPECTION LOGIC ---
+        function selectLayer(id) {
+            selectedLayerId = id;
+            const data = ROOF_LAYERS.find(l => l.id === id);
+            const targetMesh = layerMeshes.find(m => m.userData.id === id);
+
+            if (!data || !targetMesh) return;
+
+            const isolateBtn = document.getElementById('btn-isolate');
+            isolateBtn.removeAttribute('disabled');
+            isolateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+
+            layerMeshes.forEach(mesh => {
+                const isSelected = mesh.userData.id === id;
+                mesh.traverse(child => {
+                    if (child.isMesh && child.material) {
+                        if (isSelected) {
+                            child.material.emissive = new THREE.Color(0xf59e0b);
+                            child.material.emissiveIntensity = 0.25;
+                        } else {
+                            child.material.emissive = new THREE.Color(0x000000);
+                            child.material.emissiveIntensity = 0;
+                        }
+                    }
+                });
+            });
+
+            const worldPos = new THREE.Vector3();
+            targetMesh.getWorldPosition(worldPos);
+
+            gsap.to(controls.target, {
+                x: worldPos.x * 0.3,
+                y: worldPos.y,
+                z: worldPos.z * 0.3,
+                duration: 0.7,
+                ease: "power2.out"
+            });
+
+            document.querySelectorAll('.layer-btn').forEach(btn => {
+                if (btn.dataset.id === id) {
+                    btn.className = 'layer-btn w-full flex items-center justify-between p-2.5 rounded-xl border text-left transition-all text-xs font-medium bg-amber-500/20 border-amber-500/60 text-amber-300 shadow-md';
+                } else {
+                    btn.className = 'layer-btn w-full flex items-center justify-between p-2.5 rounded-xl border text-left transition-all text-xs font-medium bg-slate-900/40 border-slate-800/80 text-slate-300 hover:bg-slate-800/60 hover:text-white';
+                }
+            });
+
+            document.getElementById('info-placeholder').classList.add('hidden');
+            const infoContent = document.getElementById('info-content');
+            infoContent.classList.remove('hidden');
+
+            document.getElementById('layer-badge').innerText = data.badge;
+            document.getElementById('layer-title').innerText = data.name;
+            document.getElementById('layer-desc').innerText = data.desc;
+            document.getElementById('layer-function').innerText = data.function;
+            document.getElementById('layer-installation').innerText = data.installation;
+
+            const specsGrid = document.getElementById('layer-specs');
+            specsGrid.innerHTML = '';
+            Object.entries(data.specs).forEach(([key, val]) => {
+                const specItem = document.createElement('div');
+                specItem.className = 'bg-slate-950/60 p-2 rounded-lg border border-slate-800/60';
+                specItem.innerHTML = `
+                    <span class="text-[10px] text-slate-400 block">${key}</span>
+                    <span class="font-semibold text-slate-200 text-xs">${val}</span>
+                `;
+                specsGrid.appendChild(specItem);
+            });
+
+            document.getElementById('side-panel').classList.remove('translate-x-full');
+        }
+
+        // --- EXPLODE ANIMATION ---
+        function toggleExplodedView() {
+            isExploded = !isExploded;
+            document.getElementById('explode-text').innerText = isExploded ? 'Stack Layers' : 'Explode Layers';
+
+            layerMeshes.forEach(mesh => {
+                const targetY = isExploded ? mesh.userData.explodedY : mesh.userData.assembledY;
+                gsap.to(mesh.position, {
+                    y: targetY,
+                    duration: 0.8,
+                    ease: "back.out(1.2)"
+                });
+            });
+        }
+
+        // --- RESET CAMERA ---
+        function resetCamera() {
+            gsap.to(camera.position, { x: 6.5, y: 5.0, z: 8.0, duration: 0.8, ease: "power2.out" });
+            gsap.to(controls.target, { x: 0, y: 0, z: 0, duration: 0.8, ease: "power2.out" });
+
+            if (isIsolated) {
+                toggleIsolate();
+            }
+        }
+
+        // --- TOGGLE WIREFRAME ---
+        function toggleWireframe() {
+            isWireframe = !isWireframe;
+            const btn = document.getElementById('btn-wireframe');
+            btn.classList.toggle('text-amber-400', isWireframe);
+            btn.classList.toggle('bg-amber-500/20', isWireframe);
+
+            layerMeshes.forEach(mesh => {
+                mesh.traverse(child => {
+                    if (child.isMesh && child.material) {
+                        child.material.wireframe = isWireframe;
+                    }
+                });
+            });
+        }
+
+        // --- TOGGLE ISOLATION MODE ---
+        function toggleIsolate() {
+            if (!selectedLayerId) return;
+
+            isIsolated = !isIsolated;
+            const btn = document.getElementById('btn-isolate');
+            btn.classList.toggle('text-amber-400', isIsolated);
+            btn.classList.toggle('bg-amber-500/20', isIsolated);
+
+            layerMeshes.forEach(mesh => {
+                const isSelected = mesh.userData.id === selectedLayerId;
+                const targetScale = isIsolated ? (isSelected ? { x: 1, y: 1, z: 1 } : { x: 0.001, y: 0.001, z: 0.001 }) : { x: 1, y: 1, z: 1 };
+
+                gsap.to(mesh.scale, {
+                    x: targetScale.x,
+                    y: targetScale.y,
+                    z: targetScale.z,
+                    duration: 0.4,
+                    ease: "power2.out",
+                    onUpdate: () => {
+                        mesh.visible = mesh.scale.x > 0.01;
+                    }
+                });
+            });
+        }
+
+        // --- TOGGLE HOTSPOTS VISIBILITY ---
+        function toggleHotspotsVisibility() {
+            const container = document.getElementById('hotspots-container');
+            const btn = document.getElementById('btn-toggle-hotspots');
+            
+            const isHidden = container.style.display === 'none';
+            container.style.display = isHidden ? 'block' : 'none';
+
+            btn.classList.toggle('text-amber-400', isHidden);
+            btn.classList.toggle('bg-amber-500/10', isHidden);
+            btn.classList.toggle('text-slate-400', !isHidden);
+        }
+
+        // --- TOAST NOTIFICATION ---
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').innerText = message;
+            toast.classList.remove('opacity-0', '-translate-y-2');
+            toast.classList.add('opacity-100', 'translate-y-0');
+
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', '-translate-y-2');
+            }, 3000);
+        }
+
+        // --- EXPORT SNAPSHOT ---
+        function exportSnapshot() {
+            // Force re-render to ensure pristine frame buffer
+            renderer.render(scene, camera);
+            const dataUrl = renderer.domElement.toDataURL('image/png');
+
+            const link = document.createElement('a');
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            link.download = `Roof_Detail_Snapshot_${timestamp}.png`;
+            link.href = dataUrl;
+            link.click();
+
+            showToast('High-Res PNG Snapshot downloaded!');
+        }
+
+        // --- SHARE LINK & ENCODE STATE ---
+        function shareStateLink() {
+            const params = new URLSearchParams();
+            if (selectedLayerId) params.set('layer', selectedLayerId);
+            if (isExploded) params.set('exploded', '1');
+            if (isWireframe) params.set('wireframe', '1');
+            if (isIsolated) params.set('isolated', '1');
+
+            // Encode camera position & control target coordinates
+            params.set('cx', camera.position.x.toFixed(2));
+            params.set('cy', camera.position.y.toFixed(2));
+            params.set('cz', camera.position.z.toFixed(2));
+            params.set('tx', controls.target.x.toFixed(2));
+            params.set('ty', controls.target.y.toFixed(2));
+            params.set('tz', controls.target.z.toFixed(2));
+
+            const shareUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+
+            // Exec command fallback for iframe compatibility
+            const tempInput = document.createElement('input');
+            document.body.appendChild(tempInput);
+            tempInput.value = shareUrl;
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+
+            showToast('Shareable view link copied to clipboard!');
+        }
+
+        // --- LOAD STATE FROM URL PARAMETERS ---
+        function loadStateFromURL() {
+            const params = new URLSearchParams(window.location.search);
+
+            // Set camera & target position if supplied
+            if (params.has('cx') && params.has('cy') && params.has('cz')) {
+                camera.position.set(
+                    parseFloat(params.get('cx')),
+                    parseFloat(params.get('cy')),
+                    parseFloat(params.get('cz'))
+                );
+            }
+
+            if (params.has('tx') && params.has('ty') && params.has('tz')) {
+                controls.target.set(
+                    parseFloat(params.get('tx')),
+                    parseFloat(params.get('ty')),
+                    parseFloat(params.get('tz'))
+                );
+            }
+
+            // Exploded State
+            if (params.get('exploded') === '1') {
+                toggleExplodedView();
+            }
+
+            // Wireframe State
+            if (params.get('wireframe') === '1') {
+                toggleWireframe();
+            }
+
+            // Active Layer
+            const layerId = params.get('layer');
+            if (layerId && ROOF_LAYERS.some(l => l.id === layerId)) {
+                selectLayer(layerId);
+                // Isolated view mode
+                if (params.get('isolated') === '1') {
+                    toggleIsolate();
+                }
+            }
+        }
+
+        // --- RAYCASTING FOR MOUSE SELECTION ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        function onPointerDown(event) {
+            if (event.target.tagName !== 'CANVAS') return;
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            
+            const clickableObjects = [];
+            layerMeshes.forEach(m => {
+                if (m.visible) {
+                    if (m.isMesh) clickableObjects.push(m);
+                    else m.traverse(c => { if (c.isMesh) clickableObjects.push(c); });
+                }
+            });
+
+            const intersects = raycaster.intersectObjects(clickableObjects, false);
+
+            if (intersects.length > 0) {
+                let hitObj = intersects[0].object;
+                while (hitObj.parent && !hitObj.userData.id && hitObj.parent !== scene) {
+                    hitObj = hitObj.parent;
+                }
+                if (hitObj.userData && hitObj.userData.id) {
+                    selectLayer(hitObj.userData.id);
+                }
+            }
+        }
+
+        // --- RESIZE HANDLER ---
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        // --- ANIMATION LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            updateHotspots();
+            renderer.render(scene, camera);
+        }
+
+        // Initialize on window load
+        window.onload = init;
+    </script>
+</body>
+</html>
+```
